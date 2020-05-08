@@ -12,18 +12,18 @@ pub fn cmd(input: TokenStream) -> TokenStream {
     
     // input = `ls | grep "Cargo"`
     let root = Cmd{
-        env: None,
+        envs: None,
         commands: vec![
             Command {span: Span::call_site(), name: "ls".to_string(), args: vec![]},
             Command {span: Span::call_site(), name: "grep".to_string(), args: vec!["Cargo".to_string()]},
         ],
         stdin: None,
     };
-    TokenStream::from(quote! {#root})
+    TokenStream::from(root.into_token_stream())
 }
 
 struct Cmd {
-    env: Option<Expr>,
+    envs: Option<Expr>,
     commands: Vec<Command>,
     stdin: Option<Expr>,
 }
@@ -53,13 +53,17 @@ impl ToTokens for Cmd {
         }
 
         let mut prev: Option<Ident> = None;
+        let mut stdin = self.stdin.clone().map(|stdin| quote!{ #stdin });
         let cmds: Vec<Stream> = self.commands.iter().zip(0..).map(|(cmd, i)| {
             
             let ident = Ident::new(&format!("x{}", i), cmd.span);
 
-            let command = cmd.to_tokens(ident.clone(), prev.clone(), i == self.commands.len() - 1);
+            let command = cmd.to_tokens(self.envs.clone(), ident.clone(), stdin.clone(), i == self.commands.len() - 1);
 
             prev = Some(ident);
+            stdin = prev.clone().map(|p| quote!{
+                #p.stdout.unwrap()
+            });
 
             command
         }).collect();
@@ -78,17 +82,31 @@ impl ToTokens for Cmd {
 }
 
 impl Command {
-    fn to_tokens(&self, ident: Ident, prev: Option<Ident>, last: bool) -> Stream {
+    fn to_tokens(&self, envs: Option<Expr>, ident: Ident, stdin: Option<Stream>, last: bool) -> Stream {
         let name = self.name.clone();
         let command = self.args.iter().fold(
-            quote!{ std::process::Command::new(#name) },
-            |command, arg| quote!{ #command.arg(#arg) },
+            quote!{ std::process::Command::new(#name) }, // Create the command
+            |command, arg| quote!{ #command.arg(#arg) }, // and add all the args
         );
-        let command = match prev {
-            Some(p) => quote!{ #command.stdin(#p.stdout.unwrap()) },
+
+        // If any envs exist, add them to the command
+        // Envs must be of type IntoIterator(Item=(K, V)) where K, V: AsRef<OsStr>,
+        // eg HashMap<String,String>
+        let command = match envs {
+            Some(envs) => quote!{ #command.envs(#envs) },
             None => command,
         };
 
+        // If a previous command exists, add it's stdin to the stdin
+        // TODO: expand on this in future to support stderr => stdin
+        let command = match stdin {
+            Some(stdin) => quote!{ #command.stdin(#stdin) },
+            None => command,
+        };
+
+        // If this is the last command, get the output
+        // Otherwise, create a pipe for the stdout and spawn the command
+        // TODO: maybe in future always use pipes and return pipes for the user to deal with
         if last {
             quote!{ let #ident = #command.output()? }
         } else {
