@@ -3,8 +3,8 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use proc_macro2::{TokenStream as Stream, Span};
 use proc_macro_hack::proc_macro_hack;
-use quote::{quote, ToTokens};
-use syn::{parse_macro_input, Expr, Ident};
+use quote::{quote, quote_spanned, ToTokens};
+use syn::{parse_macro_input, Expr, Ident, braced};
 use syn::parse::{Parse, ParseStream, Result};
 use syn::punctuated::Punctuated;
 use syn::Token;
@@ -47,7 +47,7 @@ struct Cmd {
 struct Command {
     span: Span,
     name: Expr,
-    args: Vec<Expr>
+    args: Vec<(Expr, Span)>
 }
 
 impl Parse for Cmd {
@@ -75,6 +75,83 @@ fn convert_expr(expr: Expr) -> Expr {
     }
 }
 
+fn into_expr(ident: Ident) -> Expr {
+    let mut p = Punctuated::<syn::PathSegment, Token![::]>::new();
+    p.push(syn::PathSegment{
+        arguments: syn::PathArguments::None,
+        ident,
+    });
+
+    Expr::Path(
+        syn::ExprPath{
+            attrs: vec![],
+            qself: None,
+            path: syn::Path {
+                leading_colon: None,
+                segments: p,
+            }
+        }
+    )
+}
+
+fn parse_ident(input: ParseStream) -> Result<(Expr, Span)> {
+    if input.peek(syn::token::Brace) {
+        let content;
+        let _ = braced!(content in input);
+
+        let span = content.span();
+        println!("{:?}", span);
+
+        if content.is_empty() {
+            return Err(syn::Error::new(span,
+"braces after # must contain a valid expression.
+If this was meant to be a literal, use ## instead"))
+        }
+
+        let expr = content.parse()?;
+
+        if content.is_empty() {
+            Ok((expr, span))
+        } else {
+            Err(syn::Error::new(span,
+"braces after # must contain a valid expression.
+If this was meant to be a literal, use ## instead"))
+        }
+    } else {
+        let ident = input.parse::<Ident>()?;
+        let span = ident.span();
+        Ok((into_expr(ident), span))
+    }
+}
+
+// Read input into a string, until a space is found
+// unless that space is inside of quotes
+// Example:
+// --foo.bar="baz qux" -> str_expr("--foo.bar=baz quz")
+fn parse_literal(input: ParseStream) -> Result<(Expr, Span)> {
+    let span = input.span();
+    Ok((convert_expr(input.parse::<Expr>()?), span))
+}
+
+fn parse_expr_or_ident(input: ParseStream) -> Result<(Expr, Span)> {
+    // First, check for punctuation.
+    // If Token![#], parse ident or {expr}
+    // Otherwise, just a str_expr
+
+    if input.peek(Token![#]) {
+        input.parse::<Token![#]>()?;
+        if input.peek2(Token![#]) {
+            parse_literal(input)
+        } else {
+            parse_ident(input)
+        }
+    } else {
+        parse_literal(input)
+    }
+
+    // Ok(str_expr("", input.span()))
+}
+
 impl Parse for Command {
     fn parse(input: ParseStream) -> Result<Self> {
         // ls -la => name: "ls", args: vec!["-la"]
@@ -88,15 +165,15 @@ impl Parse for Command {
         let name_ident = input.parse::<Ident>()?;
         let name = str_expr(&format!("{}", name_ident), name_ident.span());
 
-        let mut args = Vec::<Expr>::new();
+        let mut args = Vec::<(Expr, Span)>::new();
         loop {
             if input.is_empty() || input.peek(Token![|]) {
                 break;
             }
 
-            let expr = convert_expr(input.parse::<Expr>()?);
+            let (expr, span) = parse_expr_or_ident(input)?;
 
-            args.push(expr);
+            args.push((expr, span));
         }
 
         Ok(Command{
@@ -154,10 +231,14 @@ impl ToTokens for Cmd {
 
 impl Command {
     fn to_tokens(&self, envs: Option<Expr>, ident: Ident, stdin: Option<Stream>, last: bool) -> Stream {
-        let name = self.name.clone();
-        let command = self.args.iter().fold(
-            quote!{ std::process::Command::new(#name) }, // Create the command
-            |command, arg| quote!{ #command.arg(#arg) }, // and add all the args
+        let Command{
+            name,
+            args,
+            span,
+        } = self;
+        let command = args.iter().fold(
+            quote_spanned!{*span=> std::process::Command::new(format!("{}", #name)) }, // Create the command
+            |command, (arg, span)| quote_spanned!{*span=> #command.arg(format!("{}", #arg)) }, // and add all the args
         );
 
         // If any envs exist, add them to the command
