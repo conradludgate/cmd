@@ -7,7 +7,6 @@ use boolinator::Boolinator;
 use std::iter::Peekable;
 use quote::{quote, quote_spanned, ToTokens};
 
-// #[proc_macro_hack]
 #[proc_macro]
 pub fn cmd(input: TokenStream1) -> TokenStream1 {
     let c = parse_cmd(TokenStream::from(input))
