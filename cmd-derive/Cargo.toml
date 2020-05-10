@@ -5,6 +5,7 @@ authors = ["Conrad Ludgate <conradludgate@gmail.com>"]
 edition = "2018"
 license = "MIT"
 repository = "https://github.com/conradludgate/cmd"
+description = "Macros for the cmd-macro crate"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
