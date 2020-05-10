@@ -5,7 +5,7 @@ Macro to help with use the `std::process::Command` feature of Rust. (only works 
 ```rust
 #![feature(proc_macro_hygiene)]
 
-use cmd::cmd;
+use cmd_macro::cmd;
 
 fn main() {
     let who = "world";

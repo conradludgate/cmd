@@ -1,6 +1,6 @@
 #![feature(proc_macro_hygiene)]
 
-use cmd::cmd;
+use cmd_macro::cmd;
 
 #[test]
 fn full_path() {

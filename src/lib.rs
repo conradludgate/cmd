@@ -3,7 +3,7 @@
 //! # Example
 //! ```
 //! #![feature(proc_macro_hygiene)]
-//! use cmd::cmd;
+//! use cmd_macro::cmd;
 //!
 //! fn main() {
 //!     let who = "world";
@@ -24,7 +24,7 @@
 /// # Example
 /// ```
 /// #![feature(proc_macro_hygiene)]
-/// use cmd::cmd;
+/// use cmd_macro::cmd;
 ///
 /// fn main() {
 ///     let who = "world";
