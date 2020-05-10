@@ -10,7 +10,7 @@ edition = "2018"
 proc-macro = true
 
 [dependencies]
-proc-macro-hack = "0.5"
-proc-macro2 = "1.0"
+proc-macro2 = { version = "1.0", features = ["span-locations"] }
 quote = "1.0"
+boolinator = "2.4"
 syn = { version = "1.0", features = ["full"] }

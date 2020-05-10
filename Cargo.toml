@@ -7,5 +7,4 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-proc-macro-hack = "0.5"
 cmd-derive = { path="./cmd-derive", version="0.1.0" }
