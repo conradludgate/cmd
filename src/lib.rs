@@ -7,13 +7,15 @@
 //!
 //! fn main() {
 //!     let who = "world";
-//!     let output = cmd!(echo hello #who ##who);
-//!     assert!(String::from(output.stdout), Ok("hello world #who\n"));
+//!     let output = cmd!(echo hello #who ##who).unwrap();
+//!     let output = String::from_utf8(output.stdout).unwrap();
+//!     assert_eq!(output, "hello world #who\n");
 //!
-//!     let s = "seq"
+//!     let s = "seq";
 //!     let n = 3;
-//!     let output = cmd!(#s #{2 * n});
-//!     assert!(String::from(output.stdout), Ok("1\n2\n3\n4\n5\n6\n"));
+//!     let output = cmd!(#s #{2 * n}).unwrap();
+//!     let output = String::from_utf8(output.stdout).unwrap();
+//!     assert_eq!(output, "1\n2\n3\n4\n5\n6\n");
 //! }
 //! ```
 
@@ -26,13 +28,15 @@
 ///
 /// fn main() {
 ///     let who = "world";
-///     let output = cmd!(echo hello #who ##who);
-///     assert!(String::from(output.stdout), Ok("hello world #who\n"));
+///     let output = cmd!(echo hello #who ##who).unwrap();
+///     let output = String::from_utf8(output.stdout).unwrap();
+///     assert_eq!(output, "hello world #who\n");
 ///
-///     let s = "seq"
+///     let s = "seq";
 ///     let n = 3;
-///     let output = cmd!(#s #{2 * n});
-///     assert!(String::from(output.stdout), Ok("1\n2\n3\n4\n5\n6\n"));
+///     let output = cmd!(#s #{2 * n}).unwrap();
+///     let output = String::from_utf8(output.stdout).unwrap();
+///     assert_eq!(output, "1\n2\n3\n4\n5\n6\n");
 /// }
 /// ```
 pub use cmd_derive::cmd;
