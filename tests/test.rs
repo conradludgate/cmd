@@ -29,8 +29,22 @@ fn interpolation_ident() {
 
 #[test]
 fn interpolation_none() {
-    let files = cmd!(echo ####1###).expect("could not execute command");
-    assert!(files.status.success());
-    let files = String::from_utf8(files.stdout).expect("not utf8 string");
-    assert_eq!(files, "###1###\n");
+    let echo = cmd!(echo ####1###).expect("could not execute command");
+    assert!(echo.status.success());
+    let echo = String::from_utf8(echo.stdout).expect("not utf8 string");
+    assert_eq!(echo, "###1###\n");
+}
+
+// TODO: Fix this bug
+#[test]
+fn acknowledge_bug() {
+    let echo = cmd!(echo {a | echo b}).expect("could not execute command");
+    assert!(echo.status.success());
+    let echo = String::from_utf8(echo.stdout).expect("not utf8 string");
+    assert_eq!(echo, "{a}\n");
+
+    let echo_workaround = cmd!(echo #{"{a"} | echo #{"b}"}).expect("could not execute command");
+    assert!(echo_workaround.status.success());
+    let echo_workaround = String::from_utf8(echo_workaround.stdout).expect("not utf8 string");
+    assert_eq!(echo_workaround, "b}\n");
 }
