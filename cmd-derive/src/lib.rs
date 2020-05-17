@@ -1,30 +1,39 @@
-#![feature(proc_macro_span)]
-#![feature(proc_macro_diagnostic)]
+#![forbid(unsafe_code)]
 
 use proc_macro2::{TokenStream, TokenTree, Punct, Group, Ident, Span};
-use proc_macro::{Diagnostic, TokenStream as TokenStream1};
+use proc_macro::{TokenStream as TokenStream1};
 use boolinator::Boolinator;
 use std::iter::Peekable;
 use quote::{quote, quote_spanned, ToTokens};
+use syn::Error;
 
 #[proc_macro]
 pub fn cmd(input: TokenStream1) -> TokenStream1 {
-    let c = parse_cmd(TokenStream::from(input))
-        .map_err(|e| e.emit())
-        .expect("Error parsing commands");
-    c.into_token_stream().into()
+    parse_cmd(TokenStream::from(input))
+        .map_or_else(
+            |e| e.to_compile_error(),
+            |c| c.into_token_stream(),
+        ).into()
 }
 
+#[derive(Debug, PartialEq)]
 pub(crate) struct Cmd {
     commands: Vec<Command>,
 }
 
+#[derive(Debug)]
 struct Command {
     span: Span,
     terms: Vec<Expr>
 }
 
-pub(crate) fn parse_cmd(input: TokenStream) -> Result<Cmd, Diagnostic> {
+impl PartialEq for Command {
+    fn eq(&self, other: &Self) -> bool {
+        self.terms == other.terms
+    }
+}
+
+pub(crate) fn parse_cmd(input: TokenStream) -> syn::Result<Cmd> {
     let mut tokens = input.into_iter().peekable();
 
     let mut commands: Vec<Command> = vec![];
@@ -36,9 +45,8 @@ pub(crate) fn parse_cmd(input: TokenStream) -> Result<Cmd, Diagnostic> {
             Ok(_) => { tokens.next(); },
             Err(NextError::EOF) => break,
             _ => return Err(
-                span_remaining(&mut tokens)
-                    .unwrap()
-                    .error("expected EOF or | after end of command")
+                Error::new(span_remaining(&mut tokens),
+                    "expected EOF or | after end of command")
             ),
         }
     }
@@ -48,7 +56,7 @@ pub(crate) fn parse_cmd(input: TokenStream) -> Result<Cmd, Diagnostic> {
     })
 }
 
-fn parse_command<I>(input: &mut Peekable<I>) -> Result<Command, Diagnostic>
+fn parse_command<I>(input: &mut Peekable<I>) -> syn::Result<Command>
 where I: Iterator<Item=TokenTree>
 {
     let first_term = parse_term(input)?;
@@ -65,7 +73,7 @@ where I: Iterator<Item=TokenTree>
         terms.push(term);
 
         span = span.join(term_span).ok_or(
-            span.unwrap().error("internal error: could not join spans")
+            Error::new(span, "internal error: could not join spans")
         )?;
     }
 
@@ -83,6 +91,21 @@ enum Expr {
     Expr(syn::Expr, Span),
 }
 
+impl std::fmt::Debug for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Expr::Literal(s, _) => write!(f, "Literal({})", s),
+            Expr::Expr(e, _) => write!(f, "Expr({:?})", e.to_token_stream()),
+        }
+    }
+}
+
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        format!("{:?}", self) == format!("{:?}", other)
+    }
+}
+
 impl Expr {
     pub fn span(&self) -> Span {
         match self {
@@ -95,7 +118,7 @@ impl Expr {
 impl ToTokens for Expr {
     fn to_tokens(&self, t: &mut TokenStream) {
         t.extend(match self {
-            Expr::Literal(str, span) => quote_spanned!{*span=> #str },
+            Expr::Literal(str, span) => quote_spanned!{*span=> ::cmd_macro::env::into_arg(#str.to_string())?.expand()? },
             Expr::Expr(e, span) => quote_spanned! {*span=> format!("{}", #e) },
         })
     }
@@ -117,7 +140,7 @@ let world = \"world\";
 cmd!(echo #{[hello, world].join(\" \")}) // echo \"hello world\"
 ";
 
-fn parse_term<I>(input: &mut Peekable<I>) -> Result<Expr, Diagnostic>
+fn parse_term<I>(input: &mut Peekable<I>) -> syn::Result<Expr>
 where I: Iterator<Item=TokenTree>
 {
     if next_punct_is(input, '#').is_ok() {
@@ -125,19 +148,19 @@ where I: Iterator<Item=TokenTree>
             .expect("internal error: peeked '#' but could not parse punct. please file a bug report");
         
         match input.peek() {
-            None => return Err(p.span().unwrap().error(ALONE_HASH_ERROR)),
+            None => return Err(Error::new(p.span(), ALONE_HASH_ERROR)),
             Some(tt) => {
                 let span = to_span(tt);
 
                 if !joined(p.span(), span) {
-                    return Err(p.span().unwrap().error(ALONE_HASH_ERROR));
+                    return Err(Error::new(p.span(), ALONE_HASH_ERROR));
                 }
 
                 match tt {
                     TokenTree::Punct(p) => 
                         match p.as_char() {
                             '#' => {}, // Do nothing. Valid term
-                            _ => return Err(p.span().unwrap().error(UNEXPECTED_HASH_ERROR)),
+                            _ => return Err(Error::new(p.span(), UNEXPECTED_HASH_ERROR)),
                         },
                     TokenTree::Ident(_) => {
                         return parse_ident(ident(input)
@@ -147,7 +170,7 @@ where I: Iterator<Item=TokenTree>
                         return parse_expr(group(input)
                             .expect("internal error: peeked group but could not parse group. please file a bug report"))
                     }
-                    _ => return Err(p.span().unwrap().error(UNEXPECTED_HASH_ERROR)),
+                    _ => return Err(Error::new(p.span(), UNEXPECTED_HASH_ERROR)),
                 }
                 
             }
@@ -157,7 +180,7 @@ where I: Iterator<Item=TokenTree>
     parse_literal(input).map(|(lit, span)| Expr::Literal(lit, span))  
 }
 
-fn parse_literal<I>(input: &mut Peekable<I>) -> Result<(String, Span), Diagnostic>
+fn parse_literal<I>(input: &mut Peekable<I>) -> syn::Result<(String, Span)>
 where I: Iterator<Item=TokenTree> {
     // We check for EOF in parse_command so this should not return None
     // Unless we're parsing a Group like `{}`, which will check the literal before
@@ -184,17 +207,14 @@ where I: Iterator<Item=TokenTree> {
 
         lit = [lit, new_lit].join("");
         span = span.join(new_span)
-            .ok_or(span.unwrap().error("internal error: could not join spans"))?;
+            .ok_or(Error::new(span, "internal error: could not join spans"))?;
     }
 
     Ok((lit, span))
 }
 
-fn to_string_span(tt: TokenTree) -> Result<(String, Span), Diagnostic> {
+fn to_string_span(tt: TokenTree) -> syn::Result<(String, Span)> {
     match tt {
-        TokenTree::Literal(l) => Ok((l.to_string(), l.span())),
-        TokenTree::Ident(i) => Ok((i.to_string(), i.span())),
-        TokenTree::Punct(p) => Ok((p.to_string(), p.span())),
         TokenTree::Group(g) => {
             let mut tokens = g.stream().into_iter().peekable();
             // TODO: refactor. This currently gets confused.
@@ -207,11 +227,14 @@ fn to_string_span(tt: TokenTree) -> Result<(String, Span), Diagnostic> {
                 proc_macro2::Delimiter::Bracket => format!("<{}>", lit),
             };
             Ok((lit, g.span()))
-        }
+        },
+        TokenTree::Literal(l) => Ok((l.to_string(), l.span())),
+        TokenTree::Ident(i) => Ok((i.to_string(), i.span())),
+        TokenTree::Punct(p) => Ok((p.to_string(), p.span())),
     }
 }
 
-fn parse_ident(i: Ident) -> Result<Expr, Diagnostic> {
+fn parse_ident(i: Ident) -> syn::Result<Expr> {
     use syn::{PathSegment, PathArguments, ExprPath, Path, token::Colon2, punctuated::Punctuated};
     let mut p: Punctuated::<PathSegment, Colon2> = Punctuated::new();
 
@@ -237,9 +260,9 @@ fn parse_ident(i: Ident) -> Result<Expr, Diagnostic> {
     ))
 }
 
-fn parse_expr(g: Group) -> Result<Expr, Diagnostic> {
+fn parse_expr(g: Group) -> syn::Result<Expr> {
     let expr = syn::parse2::<syn::Expr>(g.stream())
-        .map_err(|err| err.span().unwrap().error(err.to_string()))?;
+        .map_err(|err| Error::new(err.span(), err.to_string()))?;
     Ok(Expr::Expr(expr, g.span()))
 }
 
@@ -353,7 +376,7 @@ impl ToTokens for Cmd {
         let prev = prev.unwrap();
 
         tokens.extend(quote!{
-            || -> std::io::Result<std::process::Output> {
+            || -> ::cmd_macro::Result<std::process::Output> {
                 #(
                     #cmds;
                 )*
@@ -391,5 +414,43 @@ impl Command {
         } else {
             quote!{ let #ident = #command.stdout(std::process::Stdio::piped()).spawn()? }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Cmd, Command, parse_cmd, Expr};
+    use quote::quote;
+    use proc_macro2::Span;
+
+    fn literal(s: &str) -> Expr {
+        Expr::Literal(s.to_string(), Span::call_site())
+    }
+
+    #[test]
+    fn test_cmd() {
+        let stream = quote!{ls | grep Cargo};
+        println!("{:?}", stream);
+
+        let got = parse_cmd(stream).unwrap();
+        let expected = Cmd {
+            commands: vec![
+                Command {
+                    span: Span::call_site(),
+                    terms: vec![
+                        literal("ls")
+                    ]
+                },
+                Command {
+                    span: Span::call_site(),
+                    terms: vec![
+                        literal("grep"),
+                        literal("Cargo")
+                    ]
+                }
+            ],
+        };
+        
+        assert_eq!(got, expected);
     }
 }

@@ -1,7 +1,23 @@
 # cmd
-Macro to help with use the `std::process::Command` feature of Rust. (only works on nightly)
+
+[![Build Status](https://img.shields.io/github/workflow/status/conradludgate/cmd/Rust?style=flat-square)](https://github.com/conradludgate/cmd/actions?query=branch%3Amaster)
+[![Latest Version](https://img.shields.io/crates/v/cmd-macro.svg?style=flat-square)](https://crates.io/crates/cmd-macro)
+[![Rust Documentation](https://img.shields.io/badge/api-rustdoc-blue.svg?style=flat-square)](https://docs.rs/cmd-macro/0.1.1/cmd_macro)
+
+This crate provides a macro to help with use the `std::process::Command` feature of Rust. (requires rust nightly)
+
+```toml
+[dependencies]
+cmd-macro = "0.1"
+```
 
 ## Usage
+
+To install the nightly version, use rustup
+```sh
+rustup default nightly
+```
+
 ```rust
 #![feature(proc_macro_hygiene)]
 

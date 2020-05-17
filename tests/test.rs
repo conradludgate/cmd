@@ -37,7 +37,7 @@ fn interpolation_none() {
 
 // TODO: Fix this bug
 #[test]
-fn acknowledge_bug() {
+fn acknowledge_braces_bug() {
     let echo = cmd!(echo {a | echo b}).expect("could not execute command");
     assert!(echo.status.success());
     let echo = String::from_utf8(echo.stdout).expect("not utf8 string");
@@ -47,4 +47,13 @@ fn acknowledge_bug() {
     assert!(echo_workaround.status.success());
     let echo_workaround = String::from_utf8(echo_workaround.stdout).expect("not utf8 string");
     assert_eq!(echo_workaround, "b}\n");
+}
+
+#[test]
+fn parse_env() {
+    let echo = cmd!(echo --foo="$HOME :)").expect("could not execute command");
+    let echo = String::from_utf8(echo.stdout).expect("not utf8 string");
+
+    let home = std::env::var("HOME").expect("could not get home var");
+    assert_eq!(echo, format!("--foo={} :)\n", home));
 }

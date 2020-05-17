@@ -11,3 +11,4 @@ description = "makes std::process::Command simple to use"
 
 [dependencies]
 cmd-derive = { path="./cmd-derive", version="0.1.0" }
+thiserror = "1.0"
