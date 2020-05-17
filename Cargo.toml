@@ -1,6 +1,6 @@
 [package]
 name = "cmd-macro"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Conrad Ludgate <conradludgate@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -10,5 +10,5 @@ description = "makes std::process::Command simple to use"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cmd-derive = { path="./cmd-derive", version="0.1.0" }
+cmd-derive = { path="./cmd-derive", version="0.1.1" }
 thiserror = "1.0"
