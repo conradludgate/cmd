@@ -370,22 +370,20 @@ mod tests {
     use crate::env::*;
 
     const VAR_NAME: &str = "TEST_FOO_BAR";
+    const VAR_NAME_EMPTY: &str = "TEST_FOO_BAR_EMPTY";
+    const VAR_NAME_NULL: &str = "TEST_FOO_BAR_NULL";
     const VAR_VAL: &str = "test_foo_bar";
     const VAR_DEFAULT: &str = "default_value";
 
     fn setup() {
         set_var(VAR_NAME, VAR_VAL);
         assert_eq!(var(VAR_NAME).expect("could not get var"), VAR_VAL);
-    }
 
-    fn setup_empty() {
-        set_var(VAR_NAME, "");
-        assert_eq!(var(VAR_NAME).expect("could not get var"), "");
-    }
+        set_var(VAR_NAME_EMPTY, "");
+        assert_eq!(var(VAR_NAME_EMPTY).expect("could not get var"), "");
 
-    fn setup_null() {
-        remove_var(VAR_NAME);
-        assert_eq!(var(VAR_NAME), Err(VarError::NotPresent));
+        remove_var(VAR_NAME_NULL);
+        assert_eq!(var(VAR_NAME_NULL), Err(VarError::NotPresent));
     }
 
     use VarOption::*;
@@ -424,8 +422,20 @@ mod tests {
 
     macro_rules! test_expand {
         ($context:expr, $option:expr, $val:expr) => {
+            test_expand!(VAR_NAME, $context, $option, $val);
+        };
+
+        (empty, $context:expr, $option:expr, $val:expr) => {
+            test_expand!(VAR_NAME_EMPTY, $context, $option, $val);
+        };
+
+        (null, $context:expr, $option:expr, $val:expr) => {
+            test_expand!(VAR_NAME_NULL, $context, $option, $val);
+        };
+
+        ($var:expr, $context:expr, $option:expr, $val:expr) => {
             let v = Var {
-                name: VAR_NAME.to_string(),
+                name: $var.to_string(),
                 option: $option,
             };
             let expanded = v.expand();
@@ -489,48 +499,40 @@ mod tests {
         test_expand!("offset_negative_outofrange_length_zero", OffsetLength(-l-1, 0), "");
 
         test_expand!("length_of", LengthOf, format!("{}", l));
-    }
+        
+        // empty
+        test_expand!(empty, "none", None, "");
+        test_expand!(empty, "default", Default(VAR_DEFAULT.to_string()), "");
+        test_expand!(empty, "default_if_empty", DefaultIfEmpty(VAR_DEFAULT.to_string()), VAR_DEFAULT);
+        test_expand!(empty, "if_not_empty", IfNotEmpty(VAR_DEFAULT.to_string()), "");
+        test_expand!(empty, "if_set", IfSet(VAR_DEFAULT.to_string()), VAR_DEFAULT);
 
-    #[test]
-    fn expand_var_empty() {
-        setup_empty();
+        test_expand!(empty, "offset", Offset(5), "");
+        test_expand!(empty, "offset_negative", Offset(-5), "");
 
-        test_expand!("none", None, "");
-        test_expand!("default", Default(VAR_DEFAULT.to_string()), "");
-        test_expand!("default_if_empty", DefaultIfEmpty(VAR_DEFAULT.to_string()), VAR_DEFAULT);
-        test_expand!("if_not_empty", IfNotEmpty(VAR_DEFAULT.to_string()), "");
-        test_expand!("if_set", IfSet(VAR_DEFAULT.to_string()), VAR_DEFAULT);
+        test_expand!(empty, "offset_length", OffsetLength(5, 3), "");
+        test_expand!(empty, "offset_negative_length", OffsetLength(-7, 3), "");
+        test_expand!(empty, "offset_length_negative", OffsetLength(5, -4), "");
+        test_expand!(empty, "offset_negative_length_negative", OffsetLength(-7, -4), "");
 
-        test_expand!("offset", Offset(5), "");
-        test_expand!("offset_negative", Offset(-5), "");
+        test_expand!(empty, "length_of", LengthOf, "0");
+   
+        // null
+        test_expand!(null, "none", None, "");
+        test_expand!(null, "default", Default(VAR_DEFAULT.to_string()), VAR_DEFAULT);
+        test_expand!(null, "default_if_empty", DefaultIfEmpty(VAR_DEFAULT.to_string()), VAR_DEFAULT);
+        test_expand!(null, "if_not_empty", IfNotEmpty(VAR_DEFAULT.to_string()), "");
+        test_expand!(null, "if_set", IfSet(VAR_DEFAULT.to_string()), "");
 
-        test_expand!("offset_length", OffsetLength(5, 3), "");
-        test_expand!("offset_negative_length", OffsetLength(-7, 3), "");
-        test_expand!("offset_length_negative", OffsetLength(5, -4), "");
-        test_expand!("offset_negative_length_negative", OffsetLength(-7, -4), "");
+        test_expand!(null, "offset", Offset(5), "");
+        test_expand!(null, "offset_negative", Offset(-5), "");
 
-        test_expand!("length_of", LengthOf, "0");
-    }
+        test_expand!(null, "offset_length", OffsetLength(5, 3), "");
+        test_expand!(null, "offset_negative_length", OffsetLength(-7, 3), "");
+        test_expand!(null, "offset_length_negative", OffsetLength(5, -4), "");
+        test_expand!(null, "offset_negative_length_negative", OffsetLength(-7, -4), "");
 
-    #[test]
-    fn expand_var_null() {
-        setup_null();
-
-        test_expand!("none", None, "");
-        test_expand!("default", Default(VAR_DEFAULT.to_string()), VAR_DEFAULT);
-        test_expand!("default_if_empty", DefaultIfEmpty(VAR_DEFAULT.to_string()), VAR_DEFAULT);
-        test_expand!("if_not_empty", IfNotEmpty(VAR_DEFAULT.to_string()), "");
-        test_expand!("if_set", IfSet(VAR_DEFAULT.to_string()), "");
-
-        test_expand!("offset", Offset(5), "");
-        test_expand!("offset_negative", Offset(-5), "");
-
-        test_expand!("offset_length", OffsetLength(5, 3), "");
-        test_expand!("offset_negative_length", OffsetLength(-7, 3), "");
-        test_expand!("offset_length_negative", OffsetLength(5, -4), "");
-        test_expand!("offset_negative_length_negative", OffsetLength(-7, -4), "");
-
-        test_expand!("length_of", LengthOf, "0");
+        test_expand!(null, "length_of", LengthOf, "0");
     }
 
     macro_rules! test_parse_var_options{
