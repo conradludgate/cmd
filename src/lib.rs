@@ -54,7 +54,7 @@ pub enum ShellError {
     #[error("parsing args")]
     ParseError(#[from] env::ParseError),
     #[error("executing command")]
-    ExectutionError(#[from] std::io::Error),
+    ExecutionError(#[from] std::io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, ShellError>;
